@@ -2,15 +2,15 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using StackExchange.Redis;
 
-var eventToken = "64b873e0fc9c906f2b3ad509eb4fcaf8106c28bf";
 var quantity = 2;
 
-var events = new Dictionary<string, (string Name, string Token, int TicketId, string Captcha)>
+var events = new Dictionary<string, (string Token, string EventId, string EventToken, int TicketId, string Captcha)>
 {
-     { "overmydeadbody", new ("grape", "f22743fc6ba1bf6cbefe937c7425cb60", 534795, "王世堅") }, // 4/8
-     //{ "c9367f25-15mrwa", new ("guncat27", "20262877fd4f2c8d7607e29ff3978796", 527763, "蘇翊傑") }, // 4/9
+     { "grape", new ("d40bb2cdf698f3b0fc788980b5a57c2c", "b8994dc3", "27cb944d11453e760ed506541f9a5d47f9c48081", 575410, "排灣族") }, // 4/8,
+     //{ "guncat27", new ("5ef054356b7b5bdfd44010975077c2c9", "b8994dc3", "27cb944d11453e760ed506541f9a5d47f9c48081", 575410, "排灣族") }, // 4/9
 };
 
 // redis
@@ -24,9 +24,9 @@ do
 {
     foreach (var item in events)
     {
-        if (!database.KeyExists($"kktixFin:{item.Value.Name}:{item.Key}"))
+        if (!database.KeyExists($"kktixFin:{item.Key}:{item.Value.EventId}"))
         {
-            tasks.Add(OrderTicket(item.Value.Name, item.Value.Token, item.Key, item.Value.TicketId, item.Value.Captcha));
+            tasks.Add(OrderTicket(item.Key, item.Value.Token, item.Value.EventId, item.Value.EventToken, item.Value.TicketId, item.Value.Captcha));
         }
     }
 
@@ -42,7 +42,7 @@ do
 }
 while (true);
 
-async Task OrderTicket(string name, string kktixToken, string eventId, int ticketId, string custom_captcha)
+async Task OrderTicket(string name, string kktixToken, string eventId, string eventToken, int ticketId, string custom_captcha)
 {
     var handler = new HttpClientHandler() { };
 
@@ -53,7 +53,12 @@ async Task OrderTicket(string name, string kktixToken, string eventId, int ticke
     var baseMessage = new HttpRequestMessage(HttpMethod.Get, $"/g/events/{eventId}/register_info");
     baseMessage.Headers.Add("cookie", $"kktix_session_token_v2={kktixToken};");
 
-    _ = await client.SendAsync(baseMessage);
+    var responseMessage = await client.SendAsync(baseMessage);
+
+    var evnetResult = JsonSerializer.Deserialize<JsonObject>(await responseMessage.Content.ReadAsStringAsync());
+
+    if (evnetResult != null && evnetResult.ContainsKey("ktx_captcha"))
+        Console.WriteLine(evnetResult["ktx_captcha"]!["question"]);
 
     IEnumerable<Cookie> responseCookies = handler.CookieContainer.GetCookies(client.BaseAddress).Cast<Cookie>();
 
